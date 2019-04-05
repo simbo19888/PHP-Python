@@ -24,7 +24,7 @@ class SpeechController extends Controller
         return[
             'post' => ['POST'],
             'get' => ['GET'],
-            ];
+        ];
     }
 
 
@@ -35,21 +35,22 @@ class SpeechController extends Controller
             Yii::$app->db->createCommand()
                 ->insert('file_hash', [
                     'hash' => $hash,
-                    'status' => 'processing'
+                    'status' => 'waiting'
                 ])->execute();
         } catch (Exception $e) {
             return $e;
         }
         $return = [
             'id' => intval(Yii::$app->db->lastInsertID),
-            'status' => 'processing'];
+            'status' => 'waiting'];
         return $return;
     }
+
     private function updateHash($id){
         try {
             Yii::$app->db->createCommand()
                 ->update('file_hash', [
-                    'status' => 'processing',
+                    'status' => 'waiting',
                 ],
                     ['id'=>$id])
                 ->execute();
@@ -58,8 +59,17 @@ class SpeechController extends Controller
         }
         return [
             'id' => $id,
-            'status' => 'processing'
+            'status' => 'waiting'
         ];
+    }
+
+    private function processingQueryCheck(){
+        $query = (new \yii\db\Query())
+            ->select(['id', 'status'])
+            ->from('file_hash')
+            ->where(['or', ['status' => 'processing'], ['status' => 'waiting']])
+            ->count();
+        return (boolean)$query;
     }
 
     /* Поиск хеша в базе данных, возвращает id и status если находит, false если не находит */
@@ -70,10 +80,12 @@ class SpeechController extends Controller
             ->from('file_hash')
             ->where(['hash' => $hash])
             ->one();
-        if ((boolean)$query) {
-            return $query;
-        }
-        return false;
+        return (boolean)$query ? $query : false;
+    }
+
+    public function pythonProcessingStart()
+    {
+        pclose(popen("start  /B /min ../python/Speech-to-Text.py", "r"));
     }
 
     /* Вызывается при обращенни к /speech методом GET. Можно указать id. */
@@ -99,11 +111,13 @@ class SpeechController extends Controller
     public function actionPost()
     {
         $result=[];
-        $uploadDir = '../uploads/';
+        $uploadDir = '../uploads/mp3/';
         foreach($_FILES["file"]["error"] as $key=>$error) {
             $filePath  = $_FILES['file']['tmp_name'][$key];
             $errorCode = $_FILES['file']['error'][$key];
             $name = basename($_FILES['file']['name'][$key]);
+            $hash = md5_file($filePath);
+            $hash = microtime();
             if ($errorCode !== UPLOAD_ERR_OK) {
 
                 // Массив с названиями ошибок
@@ -124,24 +138,28 @@ class SpeechController extends Controller
                 $outputMessage = isset($errorMessages[$errorCode]) ? $errorMessages[$errorCode] : $unknownMessage;
 
                 // Выведем название ошибки
-                return $outputMessage;
-            }
-            move_uploaded_file($filePath,$uploadDir . $name);
-            $hash = md5_file($uploadDir . $name);
-            $hashExists = $this->searchForHash($hash);
-            if (!$hashExists){
-                // Кэша не существует
-                $id = $this->insertHash($hash);
-                pclose(popen("start /B /min ../python/Speech-to-Text.py {$uploadDir}{$name} {$id['id']}", "r"));
-                array_push($result, $id);
-            }else if($hashExists['status']=='error'){
-                // Кэш с ошибкой
-                pclose(popen("start  /B /min ../python/Speech-to-Text.py {$uploadDir}{$name} {$hashExists['id']}", "r"));
-                array_push($result, $this->updateHash($hashExists['id']));
-            }
-            else{
-                // Файл обрабатывается/обработан
-                array_push($result, $hashExists);
+                array_push($result, ['file' => $name,'error' => $outputMessage]);
+            } else {
+                move_uploaded_file($filePath,$uploadDir . $hash . '.mp3');
+
+                $hashExists = $this->searchForHash($hash);
+                $isProcessing = $this->processingQueryCheck();
+                if (!$hashExists) {
+                    // Кэша не существует
+                    $id = $this->insertHash($hash);
+                    array_push($result, $id);
+                } else if ($hashExists['status']=='error') {
+                    // Кэш с ошибкой
+                    array_push($result, $this->updateHash($hashExists['id']));
+                } else {
+                    // Файл обрабатывается/обработан
+                    array_push($result, $hashExists);
+                    $isProcessing = true;
+                }
+
+                if (!$isProcessing) {
+                    $this->pythonProcessingStart();
+                }
             }
         }
         return $result;

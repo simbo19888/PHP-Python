@@ -11,6 +11,7 @@ import subprocess
 from sys import argv
 import psycopg2
 from psycopg2 import sql
+import os
 
 
 try:
@@ -28,24 +29,23 @@ except ImportError:
 
 # Set up the subscription info for the Speech Service:
 # Replace with your own subscription key and service region (e.g., "westus").
-speech_key, service_region = "aa64dc3f85f54193b774fa22a1e622f5", "westus" 
+speech_key, service_region = "81910142c03e4791b01fc12a2d3356f7", "westus" 
 fromLanguage = "ru-RU"
 speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
 speech_config.speech_recognition_language = fromLanguage
 
 
-def speech_recognize_continuous_from_file(filePath):
+def connect_db():
+    return psycopg2.connect(dbname='postgres', user='postgres', 
+        password='qweasdzxc', host='localhost', port='5432')
+
+
+
+def speech_recognize_continuous_from_file(processing_file):
     """performs continuous speech recognition with input from an audio file"""
-    filePath = filePath[:-4]
-    subprocess.call(["C:\Program Files (x86)\sox-14-4-2\sox.exe", filePath+".mp3", filePath+".wav"])
-    audio_config = speechsdk.audio.AudioConfig(filename=filePath+'.wav')
-    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
-    done = False
-    result = ''
     def write_db(status, result, id):
         try:
-            conn = psycopg2.connect(dbname='postgres', user='postgres', 
-                            password='qweasdzxc', host='localhost', port='5432')
+            conn = connect_db()
             with conn.cursor() as cursor:
                 sql_update_query = """Update file_hash set status = %s , result = %s where id = %s"""
                 cursor.execute(sql_update_query, (status, str(result), id))
@@ -61,24 +61,43 @@ def speech_recognize_continuous_from_file(filePath):
                 conn.cursor().close()
                 conn.close()
 
+    baseAudioPath = "../uploads/"
+    filePath = processing_file[1]
+    id = processing_file[0]
+    write_db('processing', '', id)
+    convert_fail = subprocess.call(["C:\Program Files (x86)\sox-14-4-2\sox.exe",
+    baseAudioPath + 'mp3/' + filePath + ".mp3", '--norm', "-V1",
+    baseAudioPath + 'wav/' + filePath + ".wav"])
+    if(convert_fail):
+        write_db('error', "Ошибка при конвертации файла.", id)
+        os.remove(baseAudioPath + "mp3/" + processing_file[1] + ".mp3") 
+        return 0
+    audio_config = speechsdk.audio.AudioConfig(filename = baseAudioPath+'wav/'+filePath+'.wav')
+    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+    done = False
+    result = ''
+    
 
     def stop_cb(evt):
         """callback that stops continuous recognition upon receiving an event `evt`"""
-        speech_recognizer.stop_continuous_recognition_async()
+        speech_recognizer.stop_continuous_recognition()
         nonlocal result
+        nonlocal id
         nonlocal done
         done = True
-        write_db('succes', result, argv[2]) 
+        write_db('succes', result, id)
 
 
     def canceled_cb(evt):
         """callback that stops continuous recognition upon receiving an event `evt`"""
         nonlocal result
-        if(result==''):
-            speech_recognizer.stop_continuous_recognition_async()
+        if(result == ''):
+            speech_recognizer.stop_continuous_recognition()
             nonlocal done
+            nonlocal id
             done = True
-            write_db('error', evt.result.reason, argv[2])
+            write_db('error', evt.result.reason, id)
+
 
 
     def add_result(evt):
@@ -92,13 +111,60 @@ def speech_recognize_continuous_from_file(filePath):
     #speech_recognizer.session_started.connect(lambda evt: print('processing...'))
     speech_recognizer.session_stopped.connect(stop_cb)
     speech_recognizer.canceled.connect(canceled_cb)
-
+    #speech_recognizer.speech_end_detected.connect(lambda evt: print('end'))
 
     # Start continuous speech recognition
-    speech_recognizer.start_continuous_recognition_async()
+    speech_recognizer.start_continuous_recognition()
 
     while not done:
         time.sleep(.5)
+    del(speech_recognizer)
+    return True
 
 
-speech_recognize_continuous_from_file(argv[1])
+def remove_file(path):
+    try:
+        os.remove(path)
+    except Exception as error:
+        f = open('file.txt', 'a')
+        f.write(str(error)+'\n')
+        f.close()
+
+while True:
+    try:
+        conn = connect_db()
+        with conn.cursor() as cursor:
+            sql_select_query = """select * from file_hash where status = 'waiting' or status = 'processing' limit 10"""
+            cursor.execute(sql_select_query)
+            turn = cursor.fetchall()
+    except (Exception, psycopg2.Error) as error:
+        f = open('error.txt', 'a')
+        f.write(str(datetime.datetime.now())+':')
+        f.write(str(error))
+        f.close()
+        break
+    finally:
+        if (conn):
+            conn.cursor().close()
+            conn.close()
+    if(turn==[]):
+        break
+    for processing_file in turn:
+        if(speech_recognize_continuous_from_file(processing_file)):
+                remove_file("../uploads/mp3/" + processing_file[1] + ".mp3")
+                remove_file("../uploads/wav/" + processing_file[1] + ".wav")
+
+    undelitedfiles = ''
+    if(os.path.exists('file.txt')):
+        f = open('file.txt', 'r') 
+        undelitedfiles = f.read()
+        f.close()
+        os.remove('file.txt')
+    undelitedfiles = undelitedfiles.split('\n')[:-1]
+    for line in undelitedfiles:
+        path = line.split('\'')
+        remove_file(path[1])
+
+
+
+             
