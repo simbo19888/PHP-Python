@@ -23,28 +23,30 @@ Speech-to-Text PHP-Python
 
 Код создания таблицы:
 
-  CREATE TABLE public.file_hash
-  (
-      id integer NOT NULL DEFAULT nextval('table_id_seq'::regclass),
-      hash character varying(32) COLLATE pg_catalog."default" NOT NULL,
-      status character varying(10) COLLATE pg_catalog."default",
-      result text COLLATE pg_catalog."default",
-      CONSTRAINT file_hash_pkey PRIMARY KEY (id)
-  )
-  WITH (
-      OIDS = FALSE
-  )
-  TABLESPACE pg_default;
-  
-  ALTER TABLE public.file_hash
-      OWNER to postgres;
+
+      CREATE TABLE public.file_hash
+      (
+          id integer NOT NULL DEFAULT nextval('table_id_seq'::regclass),
+          hash character varying(32) COLLATE pg_catalog."default" NOT NULL,
+          status character varying(10) COLLATE pg_catalog."default",
+          result text COLLATE pg_catalog."default",
+          CONSTRAINT file_hash_pkey PRIMARY KEY (id)
+      )
+      WITH (
+          OIDS = FALSE
+      )
+      TABLESPACE pg_default;
+      
+      ALTER TABLE public.file_hash
+          OWNER to postgres;
+
 
 Код автоинкрементации id:
 
-  CREATE SEQUENCE public.table_id_seq;
-  
-  ALTER SEQUENCE public.table_id_seq
-      OWNER TO postgres;
+      CREATE SEQUENCE public.table_id_seq;
+      
+      ALTER SEQUENCE public.table_id_seq
+          OWNER TO postgres;
 
 ### Программы
 Для работы необходим Python версии 3.5+ со следующими установленными библиотеками <br>
