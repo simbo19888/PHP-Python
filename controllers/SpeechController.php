@@ -117,7 +117,6 @@ class SpeechController extends Controller
             $errorCode = $_FILES['file']['error'][$key];
             $name = basename($_FILES['file']['name'][$key]);
             $hash = md5_file($filePath);
-            $hash = microtime();
             if ($errorCode !== UPLOAD_ERR_OK) {
 
                 // Массив с названиями ошибок
