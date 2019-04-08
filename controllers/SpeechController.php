@@ -27,6 +27,57 @@ class SpeechController extends Controller
         ];
     }
 
+    private function uploadFile($key = null)
+    {
+        $uploadDir = '../uploads/mp3/';
+        $filePath = $key !== null ? $_FILES['file']['tmp_name'][$key] : $_FILES['file']['tmp_name'];
+        $errorCode = $key !== null ? $_FILES['file']['error'][$key] : $_FILES['file']['error'];
+        $name = $key !== null ? basename(strval($_FILES['file']['name'][$key])) : basename(strval($_FILES['file']['name']));
+        $hash = md5_file($filePath);
+        if ($errorCode !== UPLOAD_ERR_OK) {
+
+            // Массив с названиями ошибок
+            $errorMessages = [
+                UPLOAD_ERR_INI_SIZE => 'Размер файла превысил значение upload_max_filesize в конфигурации PHP.',
+                UPLOAD_ERR_PARTIAL => 'Загружаемый файл был получен только частично.',
+                UPLOAD_ERR_FORM_SIZE => 'Размер загружаемого файла превысил значение MAX_FILE_SIZE в HTML-форме.',
+                UPLOAD_ERR_NO_FILE => 'Файл не был загружен.',
+                UPLOAD_ERR_NO_TMP_DIR => 'Отсутствует временная папка.',
+                UPLOAD_ERR_CANT_WRITE => 'Не удалось записать файл на диск.',
+                UPLOAD_ERR_EXTENSION => 'PHP-расширение остановило загрузку файла.',
+            ];
+
+            // Зададим неизвестную ошибку
+            $unknownMessage = 'При загрузке файла произошла неизвестная ошибка.';
+
+            // Если в массиве нет кода ошибки, скажем, что ошибка неизвестна
+            $outputMessage = isset($errorMessages[$errorCode]) ? $errorMessages[$errorCode] : $unknownMessage;
+
+            // Выведем название ошибки
+            return ['file' => $name, 'error' => $outputMessage];
+        } else {
+            move_uploaded_file($filePath, $uploadDir . $hash . '.mp3');
+            $hashExists = $this->searchForHash($hash);
+            $isProcessing = $this->processingQueryCheck();
+            if (!$hashExists) {
+                // Кэша не существует
+                $id = $this->insertHash($hash);
+                $result = $id;
+            } else if ($hashExists['status'] == 'error') {
+                // Кэш с ошибкой
+                $result = $this->updateHash($hashExists['id']);
+            } else {
+                // Файл обрабатывается/обработан
+                $result = $hashExists;
+                $isProcessing = true;
+            }
+
+            if (!$isProcessing) {
+                $this->pythonProcessingStart();
+            }
+            return $result;
+        }
+    }
 
     private function insertHash($hash)
     {
@@ -111,55 +162,12 @@ class SpeechController extends Controller
     public function actionPost()
     {
         $result=[];
-        $uploadDir = '../uploads/mp3/';
-        foreach($_FILES["file"]["error"] as $key=>$error) {
-            $filePath  = $_FILES['file']['tmp_name'][$key];
-            $errorCode = $_FILES['file']['error'][$key];
-            $name = basename($_FILES['file']['name'][$key]);
-            $hash = md5_file($filePath);
-            if ($errorCode !== UPLOAD_ERR_OK) {
-
-                // Массив с названиями ошибок
-                $errorMessages = [
-                    UPLOAD_ERR_INI_SIZE   => 'Размер файла превысил значение upload_max_filesize в конфигурации PHP.',
-                    UPLOAD_ERR_PARTIAL    => 'Загружаемый файл был получен только частично.',
-                    UPLOAD_ERR_FORM_SIZE  => 'Размер загружаемого файла превысил значение MAX_FILE_SIZE в HTML-форме.',
-                    UPLOAD_ERR_NO_FILE    => 'Файл не был загружен.',
-                    UPLOAD_ERR_NO_TMP_DIR => 'Отсутствует временная папка.',
-                    UPLOAD_ERR_CANT_WRITE => 'Не удалось записать файл на диск.',
-                    UPLOAD_ERR_EXTENSION  => 'PHP-расширение остановило загрузку файла.',
-                ];
-
-                // Зададим неизвестную ошибку
-                $unknownMessage = 'При загрузке файла произошла неизвестная ошибка.';
-
-                // Если в массиве нет кода ошибки, скажем, что ошибка неизвестна
-                $outputMessage = isset($errorMessages[$errorCode]) ? $errorMessages[$errorCode] : $unknownMessage;
-
-                // Выведем название ошибки
-                array_push($result, ['file' => $name,'error' => $outputMessage]);
-            } else {
-                move_uploaded_file($filePath,$uploadDir . $hash . '.mp3');
-
-                $hashExists = $this->searchForHash($hash);
-                $isProcessing = $this->processingQueryCheck();
-                if (!$hashExists) {
-                    // Кэша не существует
-                    $id = $this->insertHash($hash);
-                    array_push($result, $id);
-                } else if ($hashExists['status']=='error') {
-                    // Кэш с ошибкой
-                    array_push($result, $this->updateHash($hashExists['id']));
-                } else {
-                    // Файл обрабатывается/обработан
-                    array_push($result, $hashExists);
-                    $isProcessing = true;
-                }
-
-                if (!$isProcessing) {
-                    $this->pythonProcessingStart();
-                }
+        if(is_array($_FILES['file']["error"])){
+            foreach($_FILES["file"]["error"] as $key=>$error) {
+                array_push($result, $this->uploadFile($key));
             }
+        } else {
+            array_push($result, $this->uploadFile());
         }
         return $result;
     }
