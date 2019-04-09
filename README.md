@@ -58,7 +58,7 @@ Speech-to-Text PHP-Python
   (pip install psycopg2)
 
 Для конвертации mp3 в wav программа использует sox с двумя dll (Необходимо поместить в папку с sox)(https://yadi.sk/d/hzrCNfzbO-fhcw)
-Также необходимо указать путь к sox в файле python/Speech_to_text.py(40) строка)
+Также необходимо указать путь к sox в файле python/Speech_to_text.py(68) строка, (73) строка для linux)
 
 ## Запуск
 Для начала работы надо отправить POST запрос на host/speech в котором атрибутом file будет являться mp3 файл для обработки.
