@@ -58,7 +58,6 @@ class SpeechController extends Controller
         } else {
             move_uploaded_file($filePath, $uploadDir . $hash . '.mp3');
             $hashExists = $this->searchForHash($hash);
-            $isProcessing = $this->processingQueryCheck();
             if (!$hashExists) {
                 // Кэша не существует
                 $id = $this->insertHash($hash);
@@ -69,7 +68,6 @@ class SpeechController extends Controller
             } else {
                 // Файл обрабатывается/обработан
                 $result = $hashExists;
-                $isProcessing = true;
             }
             return $result;
         }
@@ -109,15 +107,6 @@ class SpeechController extends Controller
             'status' => 'waiting'
         ];
     }
-
-//    private function processingQueryCheck(){
-//        $query = (new \yii\db\Query())
-//            ->select(['id', 'status'])
-//            ->from('file_hash')
-//            ->where(['or', ['status' => 'processing'], ['status' => 'waiting']])
-//            ->count();
-//        return (boolean)$query;
-//    }
 
     /* Поиск хеша в базе данных, возвращает id и status если находит, false если не находит */
     private function searchForHash($hash)

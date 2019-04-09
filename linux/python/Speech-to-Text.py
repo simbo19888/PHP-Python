@@ -27,6 +27,11 @@ except ImportError:
     sys.exit(1)
 
 
+pid = os.getpid()
+f = open('pid.txt','w')
+f.write(str(pid))
+f.close()
+
 # Set up the subscription info for the Speech Service:
 # Replace with your own subscription key and service region (e.g., "westus").
 speech_key, service_region = "81910142c03e4791b01fc12a2d3356f7", "westus" 
@@ -39,10 +44,7 @@ def connect_db():
     return psycopg2.connect(dbname='postgres', user='postgres', 
         password='qweasdzxc', host='localhost', port='5432')
 
-pid = os.getpid()
-f = open('pid.txt','w')
-f.write(str(pid))
-f.close()
+
 
 def speech_recognize_continuous_from_file(processing_file):
     """performs continuous speech recognition with input from an audio file"""
