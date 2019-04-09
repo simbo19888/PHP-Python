@@ -122,7 +122,7 @@ class SpeechController extends Controller
     public function pythonProcessingStart()
     {
         if(file_exists("../python/pid.txt")){
-            $pid = file_get_contents("pid.txt");
+            $pid = file_get_contents("../python/pid.txt");
             if(is_numeric($pid)){
                 $res = explode(" ",exec("ps -fp $pid"));
                 if(end($res) != "../python/Speech-to-Text.py"){
